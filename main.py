@@ -5,6 +5,7 @@ import sqlite3
 from jose import jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
+from fastapi import Request, Depends
 
 # Secret key for JWT
 SECRET_KEY = "your_secret_key"
@@ -87,8 +88,20 @@ async def login(username: str = Form(...), password: str = Form(...)):
     response.set_cookie(key="token", value=token, httponly=True)
     return response
 
-# Dashboard (Protected Page)
+def verify_token(request: Request): # verify that they have a valid token and cant just bypass logging in
+    token = request.cookies.get("token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Unable - Please log in")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload["sub"]  # Return username if valid
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired, please log in again")
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
 @app.get("/dashboard", response_class=HTMLResponse)
-def get_dashboard_page():
+def get_dashboard_page(username: str = Depends(verify_token)):
     with open("static/dashboard.html", "r") as file:
         return HTMLResponse(content=file.read())
